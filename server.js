@@ -12,39 +12,43 @@ app.use(cors());
 app.use(express.json());
 
 // DynamoDB Table Initialization
-const tableName = 'brainmap_users';
+const tableNames = ['brainmap_users', 'brainmap_results'];
 
 async function initializeDatabase() {
-  try {
-    await client.send(new DescribeTableCommand({ TableName: tableName }));
-    console.log(`✅ Table '${tableName}' already exists in DynamoDB.`);
-  } catch (error) {
-    if (error.name === 'ResourceNotFoundException') {
-      console.log(`⚠️ Table '${tableName}' not found. Creating it now...`);
-      try {
-        await client.send(
-          new CreateTableCommand({
-            TableName: tableName,
-            KeySchema: [{ AttributeName: 'email', KeyType: 'HASH' }],
-            AttributeDefinitions: [{ AttributeName: 'email', AttributeType: 'S' }],
-            BillingMode: 'PAY_PER_REQUEST', // Serverless billing mode
-          })
-        );
-        console.log(`⏳ Waiting for table '${tableName}' to become active...`);
-        await waitUntilTableExists({ client, maxWaitTime: 60 }, { TableName: tableName });
-        console.log(`✅ Table '${tableName}' successfully created and is now active.`);
-      } catch (createError) {
-        console.error('❌ Error creating table:', createError);
+  for (const tableName of tableNames) {
+    try {
+      await client.send(new DescribeTableCommand({ TableName: tableName }));
+      console.log(`✅ Table '${tableName}' already exists in DynamoDB.`);
+    } catch (error) {
+      if (error.name === 'ResourceNotFoundException') {
+        console.log(`⚠️ Table '${tableName}' not found. Creating it now...`);
+        try {
+          await client.send(
+            new CreateTableCommand({
+              TableName: tableName,
+              KeySchema: [{ AttributeName: 'email', KeyType: 'HASH' }],
+              AttributeDefinitions: [{ AttributeName: 'email', AttributeType: 'S' }],
+              BillingMode: 'PAY_PER_REQUEST', // Serverless billing mode
+            })
+          );
+          console.log(`⏳ Waiting for table '${tableName}' to become active...`);
+          await waitUntilTableExists({ client, maxWaitTime: 60 }, { TableName: tableName });
+          console.log(`✅ Table '${tableName}' successfully created and is now active.`);
+        } catch (createError) {
+          console.error(`❌ Error creating table ${tableName}:`, createError);
+        }
+      } else {
+        console.error(`❌ Error checking table existence for ${tableName}:`, error);
       }
-    } else {
-      console.error('❌ Error checking table existence:', error);
     }
   }
 }
 
 // Routes
 const loginRoutes = require('./src/login');
+const assessmentRoutes = require('./src/assessment');
 app.use('/api', loginRoutes);
+app.use('/api/assessment', assessmentRoutes);
 
 // Start Server (Only when not in Vercel)
 if (process.env.NODE_ENV !== 'production') {
