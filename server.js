@@ -47,8 +47,10 @@ async function initializeDatabase() {
 // Routes
 const loginRoutes = require('./src/login');
 const assessmentRoutes = require('./src/assessment');
+const paymentRoutes = require('./src/payment');
 app.use('/api', loginRoutes);
 app.use('/api/assessment', assessmentRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // Start Server (Only when not in Vercel)
 if (process.env.NODE_ENV !== 'production') {

@@ -25,7 +25,8 @@ router.get('/', authMiddleware, async (req, res) => {
     res.status(200).json({
       completed: true,
       responses: Item.responses,
-      completedAt: Item.completedAt
+      completedAt: Item.completedAt,
+      unlocked: Item.unlocked || false
     });
   } catch (error) {
     console.error('Error fetching assessment:', error);
@@ -58,7 +59,8 @@ router.post('/', authMiddleware, async (req, res) => {
     const newResult = {
       email: req.user.email,
       responses,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      unlocked: false
     };
 
     const putCommand = new PutCommand({
