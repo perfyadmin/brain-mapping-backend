@@ -1,8 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { DynamoDBClient, DescribeTableCommand, CreateTableCommand, waitUntilTableExists } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const { DescribeTableCommand, CreateTableCommand, waitUntilTableExists } = require('@aws-sdk/client-dynamodb');
+const { client } = require('./src/db');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -10,18 +10,6 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Initialize AWS DynamoDB Client
-const client = new DynamoDBClient({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-});
-
-const docClient = DynamoDBDocumentClient.from(client);
-module.exports.docClient = docClient; // Export for routes to use
 
 // DynamoDB Table Initialization
 const tableName = 'brainmap_users';
@@ -58,8 +46,13 @@ async function initializeDatabase() {
 const loginRoutes = require('./src/login');
 app.use('/api', loginRoutes);
 
-// Start Server
-app.listen(PORT, async () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  await initializeDatabase();
-});
+// Start Server (Only when not in Vercel)
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, async () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
+    await initializeDatabase();
+  });
+}
+
+// Export the Express API for Vercel Serverless
+module.exports = app;

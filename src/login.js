@@ -4,10 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 
-// In order to avoid circular dependencies, we import docClient dynamically or require it from the parent
-// Wait, we exported docClient in server.js, but requiring it here might cause issues if not done carefully.
-// Instead, let's require it directly.
-const { docClient } = require('../server');
+const { docClient } = require('./db');
 
 const tableName = 'brainmap_users';
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret';
