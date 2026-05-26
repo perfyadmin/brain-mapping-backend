@@ -83,6 +83,23 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
+  // 0. Hardcoded Admin Credentials Check
+  if (email.toLowerCase() === 'admin@perfy.com' && password === 'Perfy@123') {
+    const payload = {
+      user: {
+        email: 'admin@perfy.com',
+        name: 'Perfy Admin',
+        role: 'admin'
+      }
+    };
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: { email: 'admin@perfy.com', name: 'Perfy Admin', role: 'admin' }
+    });
+  }
+
   try {
     // 1. Find user by email
     const getUserCommand = new GetCommand({

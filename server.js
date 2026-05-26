@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 // DynamoDB Table Initialization
-const tableNames = ['brainmap_users', 'brainmap_results'];
+const tableNames = ['brainmap_users', 'brainmap_results', 'brainmap_companies'];
 
 async function initializeDatabase() {
   for (const tableName of tableNames) {
@@ -23,11 +23,12 @@ async function initializeDatabase() {
       if (error.name === 'ResourceNotFoundException') {
         console.log(`⚠️ Table '${tableName}' not found. Creating it now...`);
         try {
+          const keyAttribute = tableName === 'brainmap_companies' ? 'id' : 'email';
           await client.send(
             new CreateTableCommand({
               TableName: tableName,
-              KeySchema: [{ AttributeName: 'email', KeyType: 'HASH' }],
-              AttributeDefinitions: [{ AttributeName: 'email', AttributeType: 'S' }],
+              KeySchema: [{ AttributeName: keyAttribute, KeyType: 'HASH' }],
+              AttributeDefinitions: [{ AttributeName: keyAttribute, AttributeType: 'S' }],
               BillingMode: 'PAY_PER_REQUEST', // Serverless billing mode
             })
           );
@@ -49,10 +50,12 @@ const loginRoutes = require('./src/login');
 const assessmentRoutes = require('./src/assessment');
 const paymentRoutes = require('./src/payment');
 const salesRoutes = require('./src/sales');
+const adminRoutes = require('./src/admin');
 app.use('/api', loginRoutes);
 app.use('/api/assessment', assessmentRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Start Server (Only when not in Vercel)
 if (process.env.NODE_ENV !== 'production') {
