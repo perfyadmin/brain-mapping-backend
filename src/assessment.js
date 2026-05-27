@@ -26,7 +26,9 @@ router.get('/', authMiddleware, async (req, res) => {
       completed: true,
       responses: Item.responses,
       completedAt: Item.completedAt,
-      unlocked: Item.unlocked || false
+      unlocked: Item.unlocked || false,
+      paymentStatus: Item.paymentStatus || null,
+      paymentScreenshotUrl: Item.paymentScreenshotUrl || null
     });
   } catch (error) {
     console.error('Error fetching assessment:', error);

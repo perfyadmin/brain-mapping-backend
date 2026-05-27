@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { ScanCommand, PutCommand, DeleteCommand } = require('@aws-sdk/lib-dynamodb');
+const { ScanCommand, PutCommand, DeleteCommand, GetCommand, UpdateCommand } = require('@aws-sdk/lib-dynamodb');
 const { docClient } = require('./db');
 const authMiddleware = require('./middleware/auth');
 
@@ -125,6 +125,237 @@ router.delete('/companies/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting company:', error);
     res.status(500).json({ message: 'Failed to delete company' });
+  }
+});
+
+// @route   GET /api/admin/upi-config
+// @desc    Get configured UPI ID
+router.get('/upi-config', async (req, res) => {
+  try {
+    const command = new GetCommand({
+      TableName: 'brainmap_companies',
+      Key: { id: 'upi_config' }
+    });
+    const { Item } = await docClient.send(command);
+    res.status(200).json(Item || { id: 'upi_config', upiId: '', type: 'upi' });
+  } catch (error) {
+    console.error('Error fetching UPI config:', error);
+    res.status(500).json({ message: 'Failed to retrieve UPI configuration' });
+  }
+});
+
+// @route   POST /api/admin/upi-config
+// @desc    Save/update UPI ID
+router.post('/upi-config', async (req, res) => {
+  const { upiId } = req.body;
+  if (!upiId) {
+    return res.status(400).json({ message: 'UPI ID is required.' });
+  }
+  try {
+    const item = {
+      id: 'upi_config',
+      upiId: upiId.trim(),
+      type: 'upi',
+      updatedAt: new Date().toISOString()
+    };
+    const command = new PutCommand({
+      TableName: 'brainmap_companies',
+      Item: item
+    });
+    await docClient.send(command);
+    res.status(200).json({ message: 'UPI ID updated successfully', config: item });
+  } catch (error) {
+    console.error('Error updating UPI config:', error);
+    res.status(500).json({ message: 'Failed to update UPI configuration' });
+  }
+});
+
+// @route   GET /api/admin/discount-codes
+// @desc    Get all active discount codes
+router.get('/discount-codes', async (req, res) => {
+  try {
+    const command = new ScanCommand({
+      TableName: 'brainmap_companies',
+    });
+    const { Items = [] } = await docClient.send(command);
+    const discountCodes = Items.filter(item => item.type === 'discount');
+    res.status(200).json(discountCodes);
+  } catch (error) {
+    console.error('Error scanning discount codes:', error);
+    res.status(500).json({ message: 'Failed to retrieve discount codes' });
+  }
+});
+
+// @route   POST /api/admin/discount-codes
+// @desc    Create a new single-use discount code
+router.post('/discount-codes', async (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ message: 'Discount code is required.' });
+  }
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    // Check if the code already exists
+    const checkCommand = new GetCommand({
+      TableName: 'brainmap_companies',
+      Key: { id: `discount_${cleanCode}` }
+    });
+    const { Item } = await docClient.send(checkCommand);
+    if (Item) {
+      return res.status(400).json({ message: 'This discount code already exists.' });
+    }
+
+    const newDiscount = {
+      id: `discount_${cleanCode}`,
+      code: cleanCode,
+      type: 'discount',
+      createdAt: new Date().toISOString()
+    };
+
+    const command = new PutCommand({
+      TableName: 'brainmap_companies',
+      Item: newDiscount
+    });
+    await docClient.send(command);
+    res.status(201).json({ message: 'Discount code created successfully', discountCode: newDiscount });
+  } catch (error) {
+    console.error('Error creating discount code:', error);
+    res.status(500).json({ message: 'Failed to save discount code' });
+  }
+});
+
+// @route   DELETE /api/admin/discount-codes/:code
+// @desc    Delete a discount code
+router.delete('/discount-codes/:code', async (req, res) => {
+  const { code } = req.params;
+  const cleanCode = code.trim().toUpperCase();
+  try {
+    const command = new DeleteCommand({
+      TableName: 'brainmap_companies',
+      Key: { id: `discount_${cleanCode}` }
+    });
+    await docClient.send(command);
+    res.status(200).json({ message: 'Discount code deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting discount code:', error);
+    res.status(500).json({ message: 'Failed to delete discount code' });
+  }
+});
+
+// @route   GET /api/admin/pending-payments
+// @desc    Get all users with pending payment verification
+router.get('/pending-payments', async (req, res) => {
+  try {
+    // 1. Scan for pending results
+    const resultsCommand = new ScanCommand({
+      TableName: 'brainmap_results',
+    });
+    const { Items: allResults = [] } = await docClient.send(resultsCommand);
+    const pendingResults = allResults.filter(r => r.paymentStatus === 'pending');
+
+    if (pendingResults.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // 2. Scan users to match user details (Name, role, companyCode, school)
+    const usersCommand = new ScanCommand({
+      TableName: 'brainmap_users',
+    });
+    const { Items: allUsers = [] } = await docClient.send(usersCommand);
+    const usersMap = {};
+    allUsers.forEach(u => {
+      usersMap[u.email] = u;
+    });
+
+    // 3. Merge pending results with user details
+    const pendingDetails = pendingResults.map(r => {
+      const u = usersMap[r.email] || {};
+      return {
+        email: r.email,
+        paymentScreenshotUrl: r.paymentScreenshotUrl,
+        paymentSubmittedAt: r.paymentSubmittedAt,
+        name: u.name || 'Unknown User',
+        role: u.role || 'student',
+        companyCode: u.companyCode || null,
+        school: u.school || null,
+        completedAt: r.completedAt
+      };
+    });
+
+    res.status(200).json(pendingDetails);
+  } catch (error) {
+    console.error('Error scanning pending payments:', error);
+    res.status(500).json({ message: 'Failed to retrieve pending payments' });
+  }
+});
+
+// @route   POST /api/admin/approve-payment
+// @desc    Approve a pending payment and unlock the user's report
+router.post('/approve-payment', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'User email is required.' });
+  }
+  try {
+    const checkCommand = new GetCommand({
+      TableName: 'brainmap_results',
+      Key: { email }
+    });
+    const { Item } = await docClient.send(checkCommand);
+    if (!Item) {
+      return res.status(404).json({ message: 'Assessment result not found.' });
+    }
+
+    const command = new UpdateCommand({
+      TableName: 'brainmap_results',
+      Key: { email },
+      UpdateExpression: 'SET unlocked = :unlocked, paymentStatus = :status, paymentApprovedAt = :approvedAt',
+      ExpressionAttributeValues: {
+        ':unlocked': true,
+        ':status': 'approved',
+        ':approvedAt': new Date().toISOString()
+      }
+    });
+
+    await docClient.send(command);
+    res.status(200).json({ message: 'Payment approved. Report unlocked.' });
+  } catch (error) {
+    console.error('Error approving payment:', error);
+    res.status(500).json({ message: 'Failed to approve payment' });
+  }
+});
+
+// @route   POST /api/admin/reject-payment
+// @desc    Reject a pending payment and clear screenshot so user can retry
+router.post('/reject-payment', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'User email is required.' });
+  }
+  try {
+    const checkCommand = new GetCommand({
+      TableName: 'brainmap_results',
+      Key: { email }
+    });
+    const { Item } = await docClient.send(checkCommand);
+    if (!Item) {
+      return res.status(404).json({ message: 'Assessment result not found.' });
+    }
+
+    const command = new UpdateCommand({
+      TableName: 'brainmap_results',
+      Key: { email },
+      UpdateExpression: 'SET paymentStatus = :status REMOVE paymentScreenshotUrl, paymentSubmittedAt',
+      ExpressionAttributeValues: {
+        ':status': 'rejected'
+      }
+    });
+
+    await docClient.send(command);
+    res.status(200).json({ message: 'Payment rejected. User prompted to re-upload.' });
+  } catch (error) {
+    console.error('Error rejecting payment:', error);
+    res.status(500).json({ message: 'Failed to reject payment' });
   }
 });
 
