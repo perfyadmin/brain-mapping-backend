@@ -130,7 +130,7 @@ router.get('/upi-config', async (req, res) => {
 // @desc    Upload screenshot to S3 and submit for administrative verification
 // @access  Private
 router.post('/submit-screenshot', authMiddleware, async (req, res) => {
-  const { screenshot } = req.body;
+  const { screenshot, selectedPlan, selectedAddons, payableAmount } = req.body;
   if (!screenshot) {
     return res.status(400).json({ message: 'Payment screenshot image is required.' });
   }
@@ -154,11 +154,14 @@ router.post('/submit-screenshot', authMiddleware, async (req, res) => {
     const updateCommand = new UpdateCommand({
       TableName: tableName,
       Key: { email: req.user.email },
-      UpdateExpression: 'SET paymentStatus = :status, paymentScreenshotUrl = :screenshotUrl, paymentSubmittedAt = :submittedAt',
+      UpdateExpression: 'SET paymentStatus = :status, paymentScreenshotUrl = :screenshotUrl, paymentSubmittedAt = :submittedAt, selectedPlan = :selectedPlan, selectedAddons = :selectedAddons, payableAmount = :payableAmount',
       ExpressionAttributeValues: {
         ':status': 'pending',
         ':screenshotUrl': s3Url,
-        ':submittedAt': new Date().toISOString()
+        ':submittedAt': new Date().toISOString(),
+        ':selectedPlan': selectedPlan || 'Not Selected',
+        ':selectedAddons': selectedAddons || '',
+        ':payableAmount': Number(payableAmount) || 0
       },
       ReturnValues: 'ALL_NEW'
     });

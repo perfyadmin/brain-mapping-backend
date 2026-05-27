@@ -278,7 +278,10 @@ router.get('/pending-payments', async (req, res) => {
         role: u.role || 'student',
         companyCode: u.companyCode || null,
         school: u.school || null,
-        completedAt: r.completedAt
+        completedAt: r.completedAt,
+        selectedPlan: r.selectedPlan || 'Not Selected',
+        selectedAddons: r.selectedAddons || '',
+        payableAmount: r.payableAmount || 0
       };
     });
 
