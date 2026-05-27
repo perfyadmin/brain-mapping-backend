@@ -140,4 +140,48 @@ router.post('/feedback', authMiddleware, async (req, res) => {
   }
 });
 
+// @route   POST /api/assessment/profile-photo
+// @desc    Upload user's profile photo to S3 and save URL in DynamoDB
+// @access  Private
+router.post('/profile-photo', authMiddleware, async (req, res) => {
+  const { photo } = req.body;
+
+  if (!photo) {
+    return res.status(400).json({ message: 'Photo base64 data is required.' });
+  }
+
+  try {
+    // 1. Ensure the user's assessment result exists
+    const checkCommand = new GetCommand({
+      TableName: tableName,
+      Key: { email: req.user.email },
+    });
+    const { Item } = await docClient.send(checkCommand);
+    if (!Item) {
+      return res.status(404).json({ message: 'Assessment record not found.' });
+    }
+
+    // 2. Upload to S3 folder "profile_photos"
+    const fileExt = photo.includes('image/png') ? 'png' : 'jpg';
+    const filename = `${req.user.email.replace(/[^a-zA-Z0-9]/g, '_')}_profile_${Date.now()}.${fileExt}`;
+    const s3Url = await uploadToS3(photo, 'profile_photos', filename);
+
+    // 3. Save S3 URL in result record
+    const updateCommand = new UpdateCommand({
+      TableName: tableName,
+      Key: { email: req.user.email },
+      UpdateExpression: 'SET profilePhotoUrl = :s3Url',
+      ExpressionAttributeValues: {
+        ':s3Url': s3Url
+      }
+    });
+
+    await docClient.send(updateCommand);
+    res.status(200).json({ message: 'Profile photo uploaded successfully.', profilePhotoUrl: s3Url });
+  } catch (error) {
+    console.error('Error uploading profile photo:', error);
+    res.status(500).json({ message: 'Failed to upload profile photo.' });
+  }
+});
+
 module.exports = router;
