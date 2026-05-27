@@ -359,4 +359,55 @@ router.post('/reject-payment', async (req, res) => {
   }
 });
 
+// @route   GET /api/admin/feedbacks
+// @desc    Get all submitted user feedbacks & testimonials
+router.get('/feedbacks', async (req, res) => {
+  try {
+    // 1. Scan results to get feedbacks
+    const resultsCommand = new ScanCommand({
+      TableName: 'brainmap_results',
+    });
+    const { Items: allResults = [] } = await docClient.send(resultsCommand);
+    const feedbackResults = allResults.filter(r => r.feedbackSubmitted === true);
+
+    if (feedbackResults.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // 2. Scan users to match user details (Name, role, companyCode, school)
+    const usersCommand = new ScanCommand({
+      TableName: 'brainmap_users',
+    });
+    const { Items: allUsers = [] } = await docClient.send(usersCommand);
+    const usersMap = {};
+    allUsers.forEach(u => {
+      usersMap[u.email] = u;
+    });
+
+    // 3. Merge feedbacks with user details
+    const feedbacks = feedbackResults.map(r => {
+      const u = usersMap[r.email] || {};
+      return {
+        email: r.email,
+        name: u.name || 'Unknown User',
+        role: u.role || 'student',
+        companyCode: u.companyCode || null,
+        school: u.school || null,
+        rating: r.rating || 5,
+        textFeedback: r.textFeedback || '',
+        videoTestimonialUrl: r.videoTestimonialUrl || null,
+        feedbackSubmittedAt: r.feedbackSubmittedAt || r.completedAt
+      };
+    });
+
+    // Sort chronologically (newest first)
+    feedbacks.sort((a, b) => new Date(b.feedbackSubmittedAt).getTime() - new Date(a.feedbackSubmittedAt).getTime());
+
+    res.status(200).json(feedbacks);
+  } catch (error) {
+    console.error('Error fetching feedbacks:', error);
+    res.status(500).json({ message: 'Failed to retrieve feedbacks' });
+  }
+});
+
 module.exports = router;
